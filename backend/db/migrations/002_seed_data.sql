@@ -53,7 +53,12 @@ DECLARE
     'Kinabalu', 'Petronas', 'Langkawi', 'Keris', 'Cendana', 'Sepang', 'Borneo', 'Malim', 'Sinar',
     'Mahkota', 'Cahaya', 'Selatan', 'Utara', 'Tenggara', 'Perak', 'Johor', 'Melaka', 'Sukan',
     'Hikmah', 'Andaman', 'Telaga', 'Samudera', 'Selasih', 'Kapas', 'Serumpun', 'Seri', 'Kebaya',
-    'Tembok', 'Petaling', 'Rawang', 'Jati', 'Pinang', 'Layang', 'Rantau', 'Manis', 'Ampang'
+    'Tembok', 'Petaling', 'Rawang', 'Jati', 'Pinang', 'Layang', 'Rantau', 'Manis', 'Ampang',
+     'Sultan', 'Tunku', 'Dato', 'Encik', 'Cik', 'Tok', 'Haji', 'Hajjah', 'Nik', 'Kak',
+    'Abang', 'Adik', 'Pak', 'Mak', 'Lela', 'Maharaja', 'Kerajaan', 'Keraton', 'Kampung',
+    'Kota', 'Bukit', 'Sungai', 'Pantai', 'Pulau', 'Lembah', 'Bujang', 'Kuil', 'Masjid',
+    'Pusat', 'Tasik', 'Air', 'Api', 'Bumi', 'Lang', 'Gelora', 'Murni', 'Bersih',
+    'Agung', 'Indah', 'Sari', 'Raya', 'Sukan', 'Sinar', 'Cahaya', 'Petaling', 'Rawang', 'Tualang'
 ];
 
    suffixes text[] := ARRAY[
@@ -66,7 +71,12 @@ DECLARE
     'Cendana', 'Samudera', 'Serumpun', 'Negaraku', 'Petronas', 'Sepang', 'Kinabalu', 'Langkawi', 
     'Melaka', 'Johor', 'Selasih', 'Rantau', 'Tembok', 'Manis', 'Bersih', 'Murni', 'Baja', 'Tiga',
     'Timur', 'Utara', 'Selatan', 'Tenggara', 'Tuan', 'Hamba', 'Adiwira', 'Pendita', 'Sakti', 'Bumi',
-    'Rimba', 'Bendang', 'Sawah', 'Petaling', 'Rawang', 'Tualang', 'Cahaya', 'Sinar', 'Sukan', 'Besar'
+    'Rimba', 'Bendang', 'Sawah', 'Petaling', 'Rawang', 'Tualang', 'Cahaya', 'Sinar', 'Sukan', 'Besar',
+    'Agung', 'Indah', 'Sari', 'Raya', 'Murni', 'Bersih', 'Gelora', 'Lang', 'Bumi', 'Api',
+    'Air', 'Tasik', 'Pusat', 'Masjid', 'Kuil', 'Bujang', 'Lembah', 'Pulau', 'Pantai',
+    'Sungai', 'Bukit', 'Kota', 'Kampung', 'Keraton', 'Kerajaan', 'Maharaja', 'Lela', 'Mak',
+    'Pak', 'Adik', 'Abang', 'Kak', 'Nik', 'Hajjah', 'Haji', 'Tok', 'Cik', 'Encik'
+    'Dato', 'Tunku', 'Sultan'
 ];
     names text[] := ARRAY[
     'Adam', 'Aiman', 'Farah', 'Amira', 'Afiq', 'Aina', 'Hafiz', 'Hakim', 'Nadia', 'Azizah',
@@ -76,7 +86,10 @@ DECLARE
     'Azhar', 'Rania', 'Shafiqah', 'Ridwan', 'Sufian', 'Shahrul', 'Maznah', 'Latiff', 'Zainal', 'Hilmi',
     'Rosli', 'Rosnah', 'Mazlan', 'Zarina', 'Arif', 'Hamzah', 'Ahmad', 'Zaharah', 'Zulaikha', 'Hanif',
     'Kamal', 'Shafiq', 'Hidayah', 'Faizal', 'Zulkifli', 'Yasmin', 'Azman', 'Hassan', 'Shahira', 'Nazirah',
-    'Ridhwan', 'Izzah', 'Zahidah', 'Nabilah', 'Shahriman', 'Nazri', 'Nur', 'Hafizah', 'Hasnah', 'Salleh'
+    'Ridhwan', 'Izzah', 'Zahidah', 'Nabilah', 'Shahriman', 'Nazri', 'Nur', 'Hafizah', 'Hasnah', 'Salleh',
+    'Zarinah', 'Zainab', 'Zulkefli', 'Zulkarnain', 'Zul', 'Zaim', 'Zafirah', 'Zahir', 'Zaid', 'Zakaria',
+    'Zarina', 'Zulaiha', 'Zulaika', 'Zubair', 'Zubaidah', 'Zulkifli', 'Zulfa', 'Zulfadli', 'Zulfiqar', 'Zulham',
+    'Zulkarnain', 'Zulkhair', 'Zulkipli', 'Zulqarnain', 'Zulrafiq', 'Zulrijal', 'Zulrizal', 'Zulrukh', 'Zulsyafiq', 'Zulzakri'
 ];
     generated_usernames text[] := ARRAY[]::text[];
     username text;
@@ -88,7 +101,7 @@ DECLARE
     i INTEGER;
     name_style INTEGER;
 BEGIN
-    FOR i IN 1..50 LOOP
+    FOR i IN 1..50000 LOOP
         LOOP
             -- Generate username using different styles
             name_style := floor(random() * 5 + 1);
@@ -110,6 +123,9 @@ BEGIN
                                suffixes[floor(random() * array_length(suffixes, 1) + 1)];
             END CASE;
 
+            -- Add a random string or number to ensure uniqueness
+            username := username || random_string(3); -- Append a 3-character random string
+
             -- Check for duplicates in the array
             IF NOT (username = ANY (generated_usernames)) THEN
                 -- Username is unique, add to generated list
@@ -118,12 +134,8 @@ BEGIN
             END IF;
         END LOOP;
 
-        -- Add random number suffix occasionally
-        IF random() < 0.3 THEN
-            username := username || floor(random() * 100)::text;
-        END IF;
-
-        email := lower(username) || '@wira.com';
+        -- Generate a unique email address
+        email := lower(username) || '.' || random_string(3) || '@wira.com';
 
         -- Insert account
         INSERT INTO accounts (username, email, password_hash)

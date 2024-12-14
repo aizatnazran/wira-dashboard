@@ -3,13 +3,16 @@ const API_CONFIG = {
   development: {
     baseURL: 'http://localhost:8080',
   },
+  docker: {
+    baseURL: 'http://localhost:8080',
+  },
   production: {
-    baseURL: process.env.VUE_APP_API_URL || 'https://wira.aizat.dev/api',
+    baseURL: 'https://wira.aizat.dev/api',
   }
 }
 
 // Get current environment
-const env = process.env.NODE_ENV || 'development'
+const env = process.env.VUE_APP_ENV || process.env.NODE_ENV || 'development'
 
 // Export the configuration for the current environment
 export const config = API_CONFIG[env]
