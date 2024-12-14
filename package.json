@@ -1,0 +1,15 @@
+{
+  "name": "wira-assignment",
+  "version": "1.0.0",
+  "description": "WIRA Ranking Dashboard",
+  "scripts": {
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "cd backend && go run main.go",
+    "start:frontend": "cd frontend && npm run serve",
+    "install:all": "cd frontend && npm install && cd ../",
+    "build": "cd frontend && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
