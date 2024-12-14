@@ -12,6 +12,13 @@
           </div>
           <div class="flex items-center space-x-1 sm:space-x-4">
             <template v-if="isAuthenticated">
+              <button 
+  @click="handleResetCache" 
+  class="text-ac-gold hover:text-ac-light px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-transform duration-300 hover:rotate-180"
+  title="Reset Cache"
+>
+  <i class="fas fa-redo text-ac-gold"></i>
+</button>
               <router-link 
                 to="/" 
                 class="text-ac-gold hover:text-ac-light px-2 sm:px-3 py-2 rounded-md text-sm font-medium"
@@ -39,6 +46,7 @@
               >
                 Logout
               </button>
+              
             </template>
             <template v-else>
               <router-link 
@@ -73,6 +81,7 @@ import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import { computed } from 'vue'
 import { useToast } from 'vue-toastification'
+import Swal from 'sweetalert2'
 
 const router = useRouter()
 const store = useStore()
@@ -89,6 +98,63 @@ const handleLogout = async () => {
   } catch (error) {
     console.error('Logout failed:', error)
     toast.error('Logout failed. Please try again.')
+  }
+}
+
+const handleResetCache = async () => {
+  const token = localStorage.getItem('token')
+  if (!token) {
+    toast.error('You must be logged in to perform this action')
+    return
+  }
+
+  const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: 'This will clear all cached data. This action cannot be undone.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, clear it!',
+        cancelButtonText: 'No',
+        background: '#2A2A2A',
+        color: '#F5F5F5',
+        confirmButtonColor: '#C6A875',
+        cancelButtonColor: '#6B7280'
+      });
+
+  if (result.isConfirmed) {
+    try {
+      const response = await fetch('http://localhost:8080/api/cache/clear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to clear cache')
+      }
+
+      Swal.fire({
+        title: 'Cleared!',
+        text: 'Cache has been cleared successfully.',
+        icon: 'success',
+        background: '#2A2A2A',
+        color: '#F5F5F5',
+        confirmButtonColor: '#C6A875',
+        cancelButtonColor: '#6B7280'
+      });
+    } catch (error) {
+      console.error('Failed to clear cache:', error)
+      Swal.fire({
+        title: 'Error!',
+        text: 'Failed to clear cache. Please try again.',
+        icon: 'error',
+        background: '#2A2A2A',
+        color: '#F5F5F5',
+      });
+    }
   }
 }
 
@@ -128,5 +194,9 @@ body {
   font-family: 'Montserrat', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.dark-mode-popup {
+  border: 1px solid #333 !important;
 }
 </style>

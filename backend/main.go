@@ -132,6 +132,7 @@ func main() {
 			protected.POST("/characters", rankingHandler.CreateCharacter)
 			protected.GET("/profile", getProfile)
 			protected.PUT("/characters/:charId/score", updateScore)
+			protected.POST("/cache/clear", handleClearCache)
 		}
 	}
 
@@ -366,4 +367,14 @@ func searchRankings(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Search rankings endpoint"})
+}
+
+func handleClearCache(c *gin.Context) {
+    ctx := c.Request.Context()
+    err := cache.ClearAll(ctx)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to clear cache"})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"message": "Cache cleared successfully"})
 }

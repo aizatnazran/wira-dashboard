@@ -5,7 +5,7 @@ import store from './store'
 import Toast from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 import './assets/tailwind.css'
-
+import '@fortawesome/fontawesome-free/css/all.css';
 const app = createApp(App)
 
 const toastOptions = {

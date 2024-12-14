@@ -67,3 +67,20 @@ func ClearByPattern(ctx context.Context, pattern string) error {
 	}
 	return iter.Err()
 }
+
+// ClearAll clears all keys in the Redis cache
+func ClearAll(ctx context.Context) error {
+    keys, err := redisClient.Keys(ctx, "*").Result()
+    if err != nil {
+        return fmt.Errorf("failed to get keys: %v", err)
+    }
+
+    if len(keys) > 0 {
+        err = redisClient.Del(ctx, keys...).Err()
+        if err != nil {
+            return fmt.Errorf("failed to delete keys: %v", err)
+        }
+    }
+
+    return nil
+}
