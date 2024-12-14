@@ -13,12 +13,12 @@
           <div class="flex items-center space-x-1 sm:space-x-4">
             <template v-if="isAuthenticated">
               <button 
-  @click="handleResetCache" 
-  class="text-ac-gold hover:text-ac-light px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-transform duration-300 hover:rotate-180"
-  title="Reset Cache"
->
-  <i class="fas fa-redo text-ac-gold"></i>
-</button>
+                @click="handleResetCache" 
+                class="text-ac-gold hover:text-ac-light px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-transform duration-300 hover:rotate-180"
+                title="Reset Cache"
+              >
+                <i class="fas fa-redo text-ac-gold"></i>
+              </button>
               <router-link 
                 to="/" 
                 class="text-ac-gold hover:text-ac-light px-2 sm:px-3 py-2 rounded-md text-sm font-medium"
@@ -46,7 +46,6 @@
               >
                 Logout
               </button>
-              
             </template>
             <template v-else>
               <router-link 
@@ -77,92 +76,101 @@
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
+import { computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
-import { computed } from 'vue'
 import { useToast } from 'vue-toastification'
 import Swal from 'sweetalert2'
 
-const router = useRouter()
 const store = useStore()
 const toast = useToast()
-const isAuthenticated = computed(() => store.getters.isAuthenticated)
+
+const isAuthenticated = computed(() => store.state.user !== null)
 
 const handleLogout = async () => {
-  try {
+  const result = await Swal.fire({
+    title: 'Logout Confirmation',
+    text: 'Are you sure you want to log out?',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Yes, log out',
+    cancelButtonText: 'Cancel',
+    background: '#2A2A2A',
+    color: '#F5F5F5',
+    confirmButtonColor: '#C6A875',
+    cancelButtonColor: '#4B5563'
+  })
+
+  if (result.isConfirmed) {
     await store.dispatch('logout')
-    if (!store.getters.isAuthenticated) {
-      router.push('/login')
-      toast.success('Successfully logged out')
-    }
-  } catch (error) {
-    console.error('Logout failed:', error)
-    toast.error('Logout failed. Please try again.')
+    toast.success('Successfully logged out', {
+      position: 'top-right',
+      timeout: 5000,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+    })
   }
 }
 
 const handleResetCache = async () => {
-  const token = localStorage.getItem('token')
-  if (!token) {
-    toast.error('You must be logged in to perform this action')
-    return
-  }
-
   const result = await Swal.fire({
-        title: 'Are you sure?',
-        text: 'This will clear all cached data. This action cannot be undone.',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Yes, clear it!',
-        cancelButtonText: 'No',
-        background: '#2A2A2A',
-        color: '#F5F5F5',
-        confirmButtonColor: '#C6A875',
-        cancelButtonColor: '#6B7280'
-      });
+    title: 'Clear Cache',
+    text: 'Are you sure you want to clear the cache?',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Yes, clear it',
+    cancelButtonText: 'Cancel',
+    background: '#2A2A2A',
+    color: '#F5F5F5',
+    confirmButtonColor: '#C6A875',
+    cancelButtonColor: '#4B5563'
+  })
 
   if (result.isConfirmed) {
     try {
       const response = await fetch('http://localhost:8080/api/cache/clear', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        credentials: 'include'
+          'Authorization': `Bearer ${store.state.token}`
+        }
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to clear cache')
+      if (response.ok) {
+        toast.success('Cache cleared successfully', {
+          position: 'top-right',
+          timeout: 5000,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        })
+      } else {
+        toast.error('Failed to clear cache')
       }
-
-      Swal.fire({
-        title: 'Cleared!',
-        text: 'Cache has been cleared successfully.',
-        icon: 'success',
-        background: '#2A2A2A',
-        color: '#F5F5F5',
-        confirmButtonColor: '#C6A875',
-        cancelButtonColor: '#6B7280'
-      });
     } catch (error) {
-      console.error('Failed to clear cache:', error)
-      Swal.fire({
-        title: 'Error!',
-        text: 'Failed to clear cache. Please try again.',
-        icon: 'error',
-        background: '#2A2A2A',
-        color: '#F5F5F5',
-      });
+      console.error('Error clearing cache:', error)
+      toast.error('Failed to clear cache')
     }
   }
 }
 
-store.dispatch('checkAuth')
+// Check stored user session
+onMounted(() => {
+  const storedUser = localStorage.getItem('user')
+  const storedToken = localStorage.getItem('token')
+  const storedSessionID = localStorage.getItem('sessionID')
+  
+  if (storedUser && storedToken && storedSessionID) {
+    store.commit('setUser', JSON.parse(storedUser))
+    store.commit('setToken', storedToken)
+    store.commit('setSessionID', storedSessionID)
+    store.dispatch('startSessionCheck')
+  }
+})
 </script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600&display=swap');
+@import '@/assets/css/toast.css';
 
 @media (max-width: 640px) {
   .Vue-Toastification__toast {

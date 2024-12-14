@@ -18,6 +18,7 @@ type Config struct {
     RedisHost  string
     RedisPort  string
     RedisPassword string
+    ServerPort    string
 }
 
 func LoadConfig() (*Config, error) {
@@ -37,6 +38,12 @@ func LoadConfig() (*Config, error) {
         RedisHost:  os.Getenv("REDIS_HOST"),
         RedisPort:  os.Getenv("REDIS_PORT"),
         RedisPassword: os.Getenv("REDIS_PASSWORD"),
+        ServerPort:    os.Getenv("SERVER_PORT"),
+    }
+
+    // Set default server port if not specified
+    if config.ServerPort == "" {
+        config.ServerPort = "8080"
     }
 
     return config, nil

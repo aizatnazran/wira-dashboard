@@ -76,7 +76,6 @@
 
 <script>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import Swal from 'sweetalert2'
 import axios from 'axios'
@@ -84,7 +83,6 @@ import { useToast } from 'vue-toastification'
 
 export default {
   setup() {
-    const router = useRouter()
     const store = useStore()
     const toast = useToast()
     const username = ref('')
@@ -131,26 +129,25 @@ export default {
         }
 
         if (!show2FAInput.value) {
-          const response = await axios.post('http://localhost:8080/api/auth/login', {
+          const initialLoginResponse = await axios.post('http://localhost:8080/api/auth/login', {
             username: username.value,
             password: password.value
           })
 
-          if (response.data.requires_2fa) {
+          if (initialLoginResponse.data.requires_2fa) {
             show2FAInput.value = true
+            loading.value = false
             return
           }
 
-          const user = {
-            id: response.data.user.id,
-            username: response.data.user.username,
-            email: response.data.user.email,
-            token: response.data.token
-          }
-
-          store.commit('SET_USER', user)
-          localStorage.setItem('user', JSON.stringify(user))
-          localStorage.setItem('token', response.data.token)
+          // Use the store's login action with the response data
+          await store.dispatch('login', {
+            username: username.value,
+            password: password.value,
+            token: initialLoginResponse.data.token,
+            user: initialLoginResponse.data.user,
+            sessionID: initialLoginResponse.data.sessionID
+          })
 
           // Show success toast
           toast.success('Welcome back to WIRA!', {
@@ -161,25 +158,13 @@ export default {
             draggable: true,
           })
 
-          router.push('/')
         } else {
           // Second step: Verify 2FA code
-          const response = await axios.post('http://localhost:8080/api/auth/2fa/login/verify', {
+          await store.dispatch('verify2FALogin', {
             username: username.value,
             code: twoFactorCode.value
           })
 
-          const user = {
-            id: response.data.user.id,
-            username: response.data.user.username,
-            email: response.data.user.email,
-            token: response.data.token
-          }
-
-          store.commit('SET_USER', user)
-          localStorage.setItem('user', JSON.stringify(user))
-          localStorage.setItem('token', response.data.token)
-
           // Show success toast
           toast.success('Welcome back to WIRA!', {
             position: 'top-right',
@@ -188,8 +173,6 @@ export default {
             pauseOnHover: true,
             draggable: true,
           })
-
-          router.push('/')
         }
       } catch (err) {
         // Error handling for invalid credentials or server errors
@@ -203,9 +186,6 @@ export default {
           color: '#F5F5F5',
           confirmButtonColor: '#C6A875'
         })
-        store.commit('LOGOUT')
-        localStorage.removeItem('user')
-        localStorage.removeItem('token')
       } finally {
         loading.value = false
       }

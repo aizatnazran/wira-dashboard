@@ -38,6 +38,21 @@ type User struct {
 	TwoFactorEnabled bool   `json:"two_factor_enabled"`
 }
 
+type Session struct {
+	SessionID   string    `json:"session_id"`
+	AccID       int       `json:"acc_id"`
+	Metadata    string    `json:"session_metadata"`
+	CreatedAt   time.Time `json:"created_at"`
+	ExpiryTime  time.Time `json:"expiry_datetime"`
+}
+
+const (
+	// SessionExpiry5Min for testing
+	SessionExpiry5Min = 5 * time.Minute
+	// SessionExpiry1Hour for production
+	// SessionExpiry1Hour = 1 * time.Hour
+)
+
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
 	return string(bytes), err
@@ -49,12 +64,12 @@ func CheckPasswordHash(password, hash string) bool {
 }
 
 func GenerateToken(user User) (string, error) {
-	expirationTime := time.Now().Add(24 * time.Hour)
+	expiryTime := time.Now().Add(SessionExpiry5Min)
 	claims := &Claims{
 		UserID:   user.ID,
 		Username: user.Username,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			ExpiresAt: jwt.NewNumericDate(expiryTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
@@ -124,7 +139,6 @@ func CreateUser(db *sql.DB, username, password, email string) error {
 
 	return nil
 }
-
 
 func AuthenticateUser(db *sql.DB, username, password string) (*User, error) {
 	user := &User{}
@@ -228,4 +242,66 @@ func GetUser2FAStatus(db *sql.DB, userID int) (bool, string, error) {
 		return false, "", err
 	}
 	return enabled, secret.String, nil
+}
+
+func CreateSession(db *sql.DB, userID int) (*Session, error) {
+	sessionID := GenerateSessionID()
+	expiryTime := time.Now().Add(SessionExpiry5Min)
+	
+	session := &Session{
+		SessionID:  sessionID,
+		AccID:     userID,
+		Metadata:  "{}",
+		ExpiryTime: expiryTime,
+	}
+
+	_, err := db.Exec(`
+		INSERT INTO sessions (session_id, acc_id, session_metadata, expiry_datetime)
+		VALUES ($1, $2, $3, $4)
+	`, session.SessionID, session.AccID, session.Metadata, session.ExpiryTime)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create session: %v", err)
+	}
+
+	return session, nil
+}
+
+func ValidateSession(db *sql.DB, sessionID string) (*Session, error) {
+	var session Session
+	err := db.QueryRow(`
+		SELECT session_id, acc_id, session_metadata, created_at, expiry_datetime 
+		FROM sessions 
+		WHERE session_id = $1
+	`, sessionID).Scan(&session.SessionID, &session.AccID, &session.Metadata, &session.CreatedAt, &session.ExpiryTime)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("session not found")
+		}
+		return nil, err
+	}
+
+	if time.Now().After(session.ExpiryTime) {
+		DeleteSession(db, sessionID)
+		return nil, errors.New("session expired")
+	}
+
+	return &session, nil
+}
+
+func DeleteSession(db *sql.DB, sessionID string) error {
+	_, err := db.Exec("DELETE FROM sessions WHERE session_id = $1", sessionID)
+	return err
+}
+
+func DeleteExpiredSessions(db *sql.DB) error {
+	_, err := db.Exec("DELETE FROM sessions WHERE expiry_datetime < NOW()")
+	return err
+}
+
+func GenerateSessionID() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
 }

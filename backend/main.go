@@ -2,22 +2,22 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	_ "github.com/lib/pq"
 	"wira-assignment/auth"
 	"wira-assignment/cache"
 	"wira-assignment/config"
 	"wira-assignment/ranking"
-
-	"github.com/gin-gonic/gin"
-	_ "github.com/lib/pq"
-	"math"
-	"fmt"
 )
 
 var (
@@ -90,68 +90,101 @@ func main() {
 	r := gin.Default()
 
 	// CORS middleware
-	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:          12 * time.Hour,
+	}))
 
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-		c.Next()
-	})
-
-	// Health check endpoint
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
-
-	// Initialize repositories and handlers
-	rankingHandler := ranking.NewHandler(rankingRepo)
-
-	api := r.Group("/api")
+	// Public routes
+	authRouter := r.Group("/api/auth")
 	{
-		// Public routes
-		api.GET("/classes", rankingHandler.GetClasses)
+		authRouter.POST("/register", handleRegister)
+		authRouter.POST("/login", handleLogin)
+		authRouter.POST("/2fa/login/verify", handle2FALogin)
+		
+		// Session validation endpoint
+		authRouter.POST("/validate-session", func(c *gin.Context) {
+			var req struct {
+				SessionID string `json:"sessionID" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+				return
+			}
 
-		// Public routes
-		auth := api.Group("/auth")
-		{
-			auth.POST("/register", handleRegister)
-			auth.POST("/login", handleLogin)
-			auth.POST("/2fa/login/verify", handle2FALoginVerify)
-		}
+			session, err := auth.ValidateSession(db, req.SessionID)
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired session"})
+				return
+			}
 
-		// Protected routes
-		protected := api.Group("/")
-		protected.Use(authMiddleware())
-		{
-			protected.GET("/rankings", getRankings)
-			protected.GET("/rankings/:classId", getRankingsByClass)
-			protected.GET("/rankings/search", searchRankings)
-			protected.GET("/characters", rankingHandler.GetUserCharacters)
-			protected.POST("/characters", rankingHandler.CreateCharacter)
-			protected.GET("/profile", getProfile)
-			protected.PUT("/characters/:charId/score", updateScore)
-			protected.POST("/cache/clear", handleClearCache)
+			c.JSON(http.StatusOK, gin.H{
+				"valid": true,
+				"session": session,
+			})
+		})
 
-			// 2FA endpoints
-			protected.POST("/2fa/enable", handleEnable2FA)
-			protected.POST("/2fa/verify", handleVerify2FA)
-			protected.POST("/2fa/disable", handleDisable2FA)
-		}
+		// Logout endpoint
+		authRouter.POST("/logout", func(c *gin.Context) {
+			sessionID := c.GetHeader("X-Session-ID")
+			if sessionID == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Session ID is required"})
+				return
+			}
+
+			err := auth.DeleteSession(db, sessionID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"message": "Successfully logged out"})
+		})
 	}
 
-	// Handle 404
-	r.NoRoute(func(c *gin.Context) {
-		c.JSON(404, gin.H{"error": "Not found"})
-	})
+	// Protected routes
+	api := r.Group("/api")
+	api.Use(authMiddleware())
+	{
+		api.GET("/profile", getProfile)
+		api.POST("/cache/clear", handleClearCache)
+		api.GET("/rankings", getRankings)
+		api.GET("/rankings/:class", getRankingsByClass)
+		api.POST("/characters", createCharacter)
+		api.PUT("/characters/:id/score", updateScore)
+		api.GET("/search", searchRankings)
+		api.GET("/classes", func(c *gin.Context) {
+			classes, err := rankingRepo.GetClasses()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch classes"})
+				return
+			}
+			c.JSON(http.StatusOK, classes)
+		})
 
-	// Start the server
-	if err := r.Run(":8080"); err != nil {
-		log.Fatal("Failed to start server:", err)
+		// 2FA routes
+		api.POST("/2fa/enable", handleEnable2FA)
+		api.POST("/2fa/verify", handleVerify2FA)
+		api.POST("/2fa/disable", handleDisable2FA)
+	}
+
+	// Start cleanup goroutine for expired sessions
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		for range ticker.C {
+			if err := auth.DeleteExpiredSessions(db); err != nil {
+				log.Printf("Failed to cleanup expired sessions: %v", err)
+			}
+		}
+	}()
+
+	// Start server
+	if err := r.Run(fmt.Sprintf(":%s", cfg.ServerPort)); err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -216,103 +249,54 @@ type LoginResponse struct {
 	Token    string `json:"token,omitempty"`
 	User     *auth.User `json:"user,omitempty"`
 	Requires2FA bool `json:"requires_2fa,omitempty"`
+	SessionID string `json:"sessionID,omitempty"`
 }
 
 func handleLogin(c *gin.Context) {
-	var req LoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+	var loginReq LoginRequest
+	if err := c.ShouldBindJSON(&loginReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	// Basic validation
-	if len(req.Username) < 3 || len(req.Password) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be at least 3 characters and password at least 6 characters"})
-		return
-	}
-
-	// Sanitize inputs
-	req.Username = strings.TrimSpace(req.Username)
-	req.Password = strings.TrimSpace(req.Password)
-
-	user, err := auth.AuthenticateUser(db, req.Username, req.Password)
+	user, err := auth.AuthenticateUser(db, loginReq.Username, loginReq.Password)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Authentication failed"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	// Check if user has 2FA enabled
-	enabled, _, err := auth.GetUser2FAStatus(db, user.ID)
+	// Check if 2FA is enabled
+	twoFactorEnabled, _, err := auth.GetUser2FAStatus(db, user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check 2FA status"})
 		return
 	}
 
-	if enabled {
+	if twoFactorEnabled {
 		c.JSON(http.StatusOK, LoginResponse{
 			Requires2FA: true,
 		})
 		return
 	}
 
+	// Generate JWT token
 	token, err := auth.GenerateToken(*user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	c.JSON(http.StatusOK, LoginResponse{
-		Token: token,
-		User:  user,
-	})
-}
-
-type Verify2FALoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Code     string `json:"code" binding:"required"`
-}
-
-func handle2FALoginVerify(c *gin.Context) {
-	var req Verify2FALoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Get user from database
-	var user auth.User
-	var secret string
-	err := db.QueryRow(`
-        SELECT acc_id, username, email, two_factor_secret 
-        FROM accounts 
-        WHERE username = $1
-    `, req.Username).Scan(&user.ID, &user.Username, &user.Email, &secret)
-
+	// Create session
+	session, err := auth.CreateSession(db, user.ID)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
-		return
-	}
-
-	// Validate 2FA code
-	if !auth.ValidateTOTP(secret, req.Code) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid 2FA code"})
-		return
-	}
-
-	// Generate token
-	token, err := auth.GenerateToken(user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
 		return
 	}
 
 	c.JSON(http.StatusOK, LoginResponse{
-		Token: token,
-		User:  &user,
+		Token:    token,
+		User:     user,
+		SessionID: session.SessionID,
 	})
 }
 
@@ -375,7 +359,7 @@ func getRankings(c *gin.Context) {
 }
 
 func getRankingsByClass(c *gin.Context) {
-	classIDStr := c.Param("classId")
+	classIDStr := c.Param("class")
 	classID, err := strconv.Atoi(classIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid class ID"})
@@ -423,7 +407,7 @@ type UpdateScoreRequest struct {
 }
 
 func updateScore(c *gin.Context) {
-	charIDStr := c.Param("charId")
+	charIDStr := c.Param("id")
 	charID, err := strconv.Atoi(charIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid character ID"})
@@ -567,4 +551,55 @@ func handleDisable2FA(c *gin.Context) {
     }
 
     c.JSON(http.StatusOK, gin.H{"message": "2FA disabled successfully"})
+}
+
+func handle2FALogin(c *gin.Context) {
+	var req struct {
+		Username string `json:"username" binding:"required"`
+		Code     string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	// Get user and 2FA secret
+	var user auth.User
+	var secret string
+	err := db.QueryRow(`
+		SELECT acc_id, username, email, password_hash, two_factor_secret 
+		FROM accounts 
+		WHERE username = $1 AND two_factor_enabled = true`,
+		req.Username,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &secret)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+
+	// Validate TOTP code
+	if !auth.ValidateTOTP(secret, req.Code) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid 2FA code"})
+		return
+	}
+
+	// Generate JWT token
+	token, err := auth.GenerateToken(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	// Create session
+	session, err := auth.CreateSession(db, user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
+		return
+	}
+
+	c.JSON(http.StatusOK, LoginResponse{
+		Token:     token,
+		User:      &user,
+		SessionID: session.SessionID,
+	})
 }

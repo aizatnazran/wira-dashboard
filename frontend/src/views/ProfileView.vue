@@ -215,45 +215,21 @@
 import { ref, onMounted, computed } from 'vue'
 import { useStore } from 'vuex'
 import axios from 'axios'
+import Swal from 'sweetalert2'
 import QRCodeVue from 'qrcode.vue'
 import profileImage from '@/assets/profile.png'
 
 const store = useStore()
-const profile = ref({
-  username: '',
-  email: '',
-  created_at: '',
-  two_factor_enabled: false
-})
-
+const profile = ref({})
 const showEnableDialog = ref(false)
-const step = ref(1)
+const qrUrl = ref('')
+const secret = ref('')
 const password = ref('')
 const verificationCode = ref('')
 const error = ref('')
-const secret = ref('')
-const qrUrl = ref('')
+const step = ref(1)
 
-const characters = ref([
-  {
-    name: 'Helang_88',
-    class: 'PAHLAWAN',
-    rank: 42,
-    score: 8750
-  },
-  {
-    name: 'UtaraBentara',
-    class: 'RAKSHAK',
-    rank: 156,
-    score: 6420
-  },
-  {
-    name: 'Seri_Bendahara12',
-    class: 'PEMANAH',
-    rank: 89,
-    score: 7340
-  }
-])
+
 
 const highestRanked = computed(() => {
   return {
@@ -262,21 +238,54 @@ const highestRanked = computed(() => {
   }
 })
 
+const characters = computed(() => {
+  return [
+    { name: 'Helang_88', class: 'PAHLAWAN', rank: 42, score: 8750 },
+    { name: 'UtaraBentara', class: 'RAKSHAK', rank: 156, score: 6420 },
+    { name: 'Seri_Bendahara12', class: 'PEMANAH', rank: 89, score: 7340 }
+  ]
+})
+
 const formatMemberSince = (dateStr) => {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString()
+  if (!dateStr) return 'N/A'
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
 }
 
 const fetchProfile = async () => {
   try {
+    const token = store.getters.token
+    if (!token) {
+      throw new Error('No authentication token found')
+    }
+
     const response = await axios.get('http://localhost:8080/api/profile', {
       headers: {
-        Authorization: `Bearer ${store.getters.token}`
+        Authorization: `Bearer ${token}`
       }
     })
-    profile.value = response.data
+    
+    if (response.data) {
+      profile.value = response.data
+    }
   } catch (err) {
     console.error('Failed to fetch profile:', err)
+    if (err.response?.status === 401) {
+      // Session expired or invalid token
+      await store.dispatch('handleSessionExpired')
+    } else {
+      Swal.fire({
+        title: 'Error',
+        text: 'Failed to load profile data. Please try again later.',
+        icon: 'error',
+        background: '#2A2A2A',
+        color: '#F5F5F5',
+        confirmButtonColor: '#C6A875'
+      })
+    }
   }
 }
 
