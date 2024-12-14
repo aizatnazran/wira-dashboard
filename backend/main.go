@@ -80,6 +80,7 @@ func authMiddleware() gin.HandlerFunc {
 
 		c.Set("userID", claims.UserID)
 		c.Set("username", claims.Username)
+		c.Set("claims", claims)
 		c.Next()
 	}
 }
@@ -119,6 +120,7 @@ func main() {
 		{
 			auth.POST("/register", handleRegister)
 			auth.POST("/login", handleLogin)
+			auth.POST("/2fa/login/verify", handle2FALoginVerify)
 		}
 
 		// Protected routes
@@ -133,6 +135,11 @@ func main() {
 			protected.GET("/profile", getProfile)
 			protected.PUT("/characters/:charId/score", updateScore)
 			protected.POST("/cache/clear", handleClearCache)
+
+			// 2FA endpoints
+			protected.POST("/2fa/enable", handleEnable2FA)
+			protected.POST("/2fa/verify", handleVerify2FA)
+			protected.POST("/2fa/disable", handleDisable2FA)
 		}
 	}
 
@@ -162,6 +169,14 @@ func handleRegister(c *gin.Context) {
 
 	err := auth.CreateUser(db, req.Username, req.Password, req.Email)
 	if err != nil {
+		if strings.Contains(err.Error(), "username already exists") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+			return
+		}
+		if strings.Contains(err.Error(), "email already exists") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
 	}
@@ -169,9 +184,16 @@ func handleRegister(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": "User created successfully"})
 }
 
+
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
+}
+
+type LoginResponse struct {
+	Token    string `json:"token,omitempty"`
+	User     *auth.User `json:"user,omitempty"`
+	Requires2FA bool `json:"requires_2fa,omitempty"`
 }
 
 func handleLogin(c *gin.Context) {
@@ -197,19 +219,74 @@ func handleLogin(c *gin.Context) {
 		return
 	}
 
+	// Check if user has 2FA enabled
+	enabled, _, err := auth.GetUser2FAStatus(db, user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check 2FA status"})
+		return
+	}
+
+	if enabled {
+		c.JSON(http.StatusOK, LoginResponse{
+			Requires2FA: true,
+		})
+		return
+	}
+
 	token, err := auth.GenerateToken(*user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"token": token,
-		"user": gin.H{
-			"id":       user.ID,
-			"username": user.Username,
-			"email":    user.Email,
-		},
+	c.JSON(http.StatusOK, LoginResponse{
+		Token: token,
+		User:  user,
+	})
+}
+
+type Verify2FALoginRequest struct {
+	Username string `json:"username" binding:"required"`
+	Code     string `json:"code" binding:"required"`
+}
+
+func handle2FALoginVerify(c *gin.Context) {
+	var req Verify2FALoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get user from database
+	var user auth.User
+	var secret string
+	err := db.QueryRow(`
+        SELECT acc_id, username, email, two_factor_secret 
+        FROM accounts 
+        WHERE username = $1
+    `, req.Username).Scan(&user.ID, &user.Username, &user.Email, &secret)
+
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+
+	// Validate 2FA code
+	if !auth.ValidateTOTP(secret, req.Code) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid 2FA code"})
+		return
+	}
+
+	// Generate token
+	token, err := auth.GenerateToken(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, LoginResponse{
+		Token: token,
+		User:  &user,
 	})
 }
 
@@ -217,37 +294,22 @@ func getProfile(c *gin.Context) {
 	userID, _ := c.Get("userID")
 
 	var profile struct {
-		ID        int       `json:"id"`
-		Username  string    `json:"username"`
-		Email     string    `json:"email"`
-		CreatedAt time.Time `json:"created_at"`
+		ID               int       `json:"id"`
+		Username         string    `json:"username"`
+		Email            string    `json:"email"`
+		CreatedAt        time.Time `json:"created_at"`
+		TwoFactorEnabled bool      `json:"two_factor_enabled"`
 	}
 
-	// Try to get from cache
-	cacheKey := fmt.Sprintf("profile:%v", userID)
-	ctx := c.Request.Context()
-	err := cache.Get(ctx, cacheKey, &profile)
-	if err == nil {
-		c.JSON(http.StatusOK, profile)
-		return
-	}
-
-	// Get from database
-	err = db.QueryRow(`
-        SELECT acc_id, username, email, created_at
+	err := db.QueryRow(`
+        SELECT acc_id, username, email, created_at, two_factor_enabled
         FROM accounts
         WHERE acc_id = $1
-    `, userID).Scan(&profile.ID, &profile.Username, &profile.Email, &profile.CreatedAt)
+    `, userID).Scan(&profile.ID, &profile.Username, &profile.Email, &profile.CreatedAt, &profile.TwoFactorEnabled)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch profile"})
 		return
-	}
-
-	// Cache the result for 5 minutes
-	err = cache.Set(ctx, cacheKey, profile, 5*time.Minute)
-	if err != nil {
-		log.Printf("Warning: Failed to cache profile: %v", err)
 	}
 
 	c.JSON(http.StatusOK, profile)
@@ -377,4 +439,106 @@ func handleClearCache(c *gin.Context) {
         return
     }
     c.JSON(http.StatusOK, gin.H{"message": "Cache cleared successfully"})
+}
+
+type Enable2FARequest struct {
+    Password string `json:"password"`
+}
+
+type Verify2FARequest struct {
+    Code   string `json:"code"`
+    Secret string `json:"secret"`
+}
+
+func handleEnable2FA(c *gin.Context) {
+    claims, exists := c.Get("claims")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+        return
+    }
+
+    userClaims := claims.(*auth.Claims)
+    var req Enable2FARequest
+    if err := c.BindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+        return
+    }
+
+    // Verify password
+    var passwordHash string
+    err := db.QueryRow("SELECT password_hash FROM accounts WHERE acc_id = $1", userClaims.UserID).Scan(&passwordHash)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "server error"})
+        return
+    }
+
+    if !auth.CheckPasswordHash(req.Password, passwordHash) {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid password"})
+        return
+    }
+
+    // Generate 2FA secret
+    secret, err := auth.GenerateSecret()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate secret"})
+        return
+    }
+
+    // Create QR code
+    qrURL := fmt.Sprintf("otpauth://totp/Wira:%s?secret=%s&issuer=Wira", userClaims.Username, secret)
+    
+    c.JSON(http.StatusOK, gin.H{
+        "secret": secret,
+        "qr_url": qrURL,
+    })
+}
+
+func handleVerify2FA(c *gin.Context) {
+    claims, exists := c.Get("claims")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+        return
+    }
+
+    userClaims := claims.(*auth.Claims)
+    var req Verify2FARequest
+    if err := c.BindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+        return
+    }
+
+    // Validate TOTP code using the provided secret
+    if !auth.ValidateTOTP(req.Secret, req.Code) {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid code"})
+        return
+    }
+
+    // Enable 2FA with the validated secret
+    if err := auth.Enable2FA(db, userClaims.UserID, req.Secret); err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to enable 2FA"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "2FA enabled successfully"})
+}
+
+func handleDisable2FA(c *gin.Context) {
+    claims, exists := c.Get("claims")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+        return
+    }
+
+    userClaims := claims.(*auth.Claims)
+    err := auth.Disable2FA(db, userClaims.UserID)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            c.JSON(http.StatusNotFound, gin.H{"error": "2FA not enabled for this user"})
+            return
+        }
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disable 2FA"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "2FA disabled successfully"})
 }

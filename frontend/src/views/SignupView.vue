@@ -61,9 +61,15 @@
         <div>
           <button
             type="submit"
+            :disabled="isSubmitting"
             class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-black bg-ac-gold hover:bg-ac-gold/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ac-gold"
           >
-            Create Account
+            <span v-if="!isSubmitting">Create Account</span>
+            <span v-else class="flex items-center">
+              <!-- Stable FontAwesome Spinner -->
+              <i class="fa fa-circle-notch fa-spin text-white text-xl mr-2"></i>
+              Creating Account...
+            </span>
           </button>
         </div>
       </form>
@@ -82,13 +88,15 @@ export default {
   setup() {
     const router = useRouter()
     const toast = useToast()
-    
+
     const form = ref({
       username: '',
       email: '',
       password: '',
       confirmPassword: ''
     })
+
+    const isSubmitting = ref(false)
 
     const handleSignup = async () => {
       if (form.value.password !== form.value.confirmPassword) {
@@ -104,6 +112,8 @@ export default {
         return
       }
 
+      isSubmitting.value = true
+
       try {
         const response = await fetch('http://localhost:8080/api/auth/register', {
           method: 'POST',
@@ -118,8 +128,14 @@ export default {
         });
 
         if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || 'Registration failed');
+          const data = await response.json()
+          if (data.error === 'Username already exists') {
+            throw new Error('The username is already taken. Please choose another one.')
+          }
+          if (data.error === 'Email already exists') {
+            throw new Error('An account with this email already exists. Please use a different email.')
+          }
+          throw new Error(data.error || 'Failed to create user')
         }
 
         toast.success('Account created successfully!', {
@@ -141,11 +157,14 @@ export default {
           color: '#F5F5F5',
           confirmButtonColor: '#C6A875'
         })
+      } finally {
+        isSubmitting.value = false
       }
     }
 
     return {
       form,
+      isSubmitting,
       handleSignup
     }
   }

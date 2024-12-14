@@ -8,6 +8,12 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha1"
+	"encoding/base32"
+	"encoding/binary"
+	"strconv"
 )
 
 var jwtKey []byte
@@ -23,11 +29,13 @@ type Claims struct {
 }
 
 type User struct {
-	ID           int    `json:"id"`
-	Username     string `json:"username"`
-	Password     string `json:"-"` 
-	Email        string `json:"email"`
-	PasswordHash string `json:"-"` 
+	ID               int    `json:"id"`
+	Username         string `json:"username"`
+	Password         string `json:"-"` 
+	Email            string `json:"email"`
+	PasswordHash     string `json:"-"`
+	TwoFactorSecret  string `json:"-"`
+	TwoFactorEnabled bool   `json:"two_factor_enabled"`
 }
 
 func HashPassword(password string) (string, error) {
@@ -117,6 +125,7 @@ func CreateUser(db *sql.DB, username, password, email string) error {
 	return nil
 }
 
+
 func AuthenticateUser(db *sql.DB, username, password string) (*User, error) {
 	user := &User{}
 	query := `
@@ -137,4 +146,86 @@ func AuthenticateUser(db *sql.DB, username, password string) (*User, error) {
 	}
 
 	return user, nil
+}
+
+func GenerateSecret() (string, error) {
+	// Generate a random 20-byte secret
+	secret := make([]byte, 20)
+	_, err := rand.Read(secret)
+	if err != nil {
+		return "", err
+	}
+	return base32.StdEncoding.EncodeToString(secret), nil
+}
+
+func ValidateTOTP(secret string, code string) bool {
+	if len(code) != 6 {
+		return false
+	}
+	
+	inputCode, err := strconv.Atoi(code)
+	if err != nil {
+		return false
+	}
+
+	// Get current time window
+	now := time.Now().UTC().Unix() / 30
+	
+	// Check current and adjacent time windows
+	for delta := -1; delta <= 1; delta++ {
+		if generateTOTP(secret, now+int64(delta)) == inputCode {
+			return true
+		}
+	}
+	return false
+}
+
+func generateTOTP(secret string, timeWindow int64) int {
+	// Decode base32 secret
+	key, err := base32.StdEncoding.DecodeString(secret)
+	if err != nil {
+		return -1
+	}
+
+	// Create byte array of time
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, uint64(timeWindow))
+
+	// Generate HMAC-SHA1
+	h := hmac.New(sha1.New, key)
+	h.Write(buf)
+	sum := h.Sum(nil)
+
+	// Get offset
+	offset := sum[len(sum)-1] & 0xf
+
+	// Generate 4-byte code
+	code := binary.BigEndian.Uint32(sum[offset:offset+4])
+	code &= 0x7fffffff
+	code = code % 1000000
+
+	return int(code)
+}
+
+func Enable2FA(db *sql.DB, userID int, secret string) error {
+	_, err := db.Exec("UPDATE accounts SET two_factor_secret = $1, two_factor_enabled = true WHERE acc_id = $2",
+		secret, userID)
+	return err
+}
+
+func Disable2FA(db *sql.DB, userID int) error {
+	_, err := db.Exec("UPDATE accounts SET two_factor_secret = NULL, two_factor_enabled = false WHERE acc_id = $1",
+		userID)
+	return err
+}
+
+func GetUser2FAStatus(db *sql.DB, userID int) (bool, string, error) {
+	var enabled bool
+	var secret sql.NullString
+	err := db.QueryRow("SELECT two_factor_enabled, two_factor_secret FROM accounts WHERE acc_id = $1", userID).
+		Scan(&enabled, &secret)
+	if err != nil {
+		return false, "", err
+	}
+	return enabled, secret.String, nil
 }
