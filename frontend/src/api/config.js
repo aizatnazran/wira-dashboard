@@ -4,10 +4,10 @@ const API_CONFIG = {
     baseURL: 'http://localhost:8080',
   },
   docker: {
-    baseURL: 'http://localhost:8080',
+    baseURL: '/api', // Use relative path for Docker environment
   },
   production: {
-    baseURL: 'https://wira.aizat.dev/api',
+    baseURL: '/api', // Use relative path for production
   }
 }
 

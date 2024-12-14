@@ -91,7 +91,7 @@ func main() {
 
 	// CORS middleware
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     []string{"http://localhost:3000", "http://77.237.243.104:3000", "https://wira.aizat.dev"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization", "x-session-id"},
 		ExposeHeaders:    []string{"Content-Length"},
