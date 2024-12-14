@@ -93,12 +93,44 @@ export default {
     const show2FAInput = ref(false)
     const loading = ref(false)
 
+    const validateLoginData = () => {
+      if (!username.value || !password.value) {
+        Swal.fire({
+          title: 'Validation Error',
+          text: 'Please fill in all required fields',
+          icon: 'error',
+          background: '#2A2A2A',
+          color: '#F5F5F5',
+          confirmButtonColor: '#C6A875'
+        })
+        return false
+      }
+      
+      if (password.value.length < 6) {
+        Swal.fire({
+          title: 'Validation Error',
+          text: 'Password must be at least 6 characters long',
+          icon: 'error',
+          background: '#2A2A2A',
+          color: '#F5F5F5',
+          confirmButtonColor: '#C6A875'
+        })
+        return false
+      }
+
+      return true
+    }
+
     const handleSubmit = async () => {
       try {
         loading.value = true
 
+        if (!validateLoginData()) {
+          loading.value = false
+          return
+        }
+
         if (!show2FAInput.value) {
-          // First step: Login with username and password
           const response = await axios.post('http://localhost:8080/api/auth/login', {
             username: username.value,
             password: password.value

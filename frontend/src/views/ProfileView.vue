@@ -257,8 +257,8 @@ const characters = ref([
 
 const highestRanked = computed(() => {
   return {
-    class: 'Warrior',
-    rank: 1
+    class: 'Pahlawan',
+    rank: 42
   }
 })
 

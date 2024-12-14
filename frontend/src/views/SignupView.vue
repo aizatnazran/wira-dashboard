@@ -98,7 +98,55 @@ export default {
 
     const isSubmitting = ref(false)
 
+    const validateSignupData = () => {
+      // Username validation
+      if (!form.value.username || form.value.username.length < 3) {
+        Swal.fire({
+          title: 'Validation Error',
+          text: 'Username must be at least 3 characters long',
+          icon: 'error',
+          background: '#2A2A2A',
+          color: '#F5F5F5',
+          confirmButtonColor: '#C6A875'
+        })
+        return false
+      }
+
+      // Email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!form.value.email || !emailRegex.test(form.value.email)) {
+        Swal.fire({
+          title: 'Validation Error',
+          text: 'Please enter a valid email address',
+          icon: 'error',
+          background: '#2A2A2A',
+          color: '#F5F5F5',
+          confirmButtonColor: '#C6A875'
+        })
+        return false
+      }
+
+      // Password validation
+      if (!form.value.password || form.value.password.length < 6) {
+        Swal.fire({
+          title: 'Validation Error',
+          text: 'Password must be at least 6 characters long',
+          icon: 'error',
+          background: '#2A2A2A',
+          color: '#F5F5F5',
+          confirmButtonColor: '#C6A875'
+        })
+        return false
+      }
+
+      return true
+    }
+
     const handleSignup = async () => {
+      if (!validateSignupData()) {
+        return
+      }
+
       if (form.value.password !== form.value.confirmPassword) {
         Swal.fire({
           title: 'Password Mismatch',
