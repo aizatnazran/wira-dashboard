@@ -4,10 +4,10 @@ const API_CONFIG = {
     baseURL: 'http://localhost:8080',
   },
   docker: {
-    baseURL: '/api', // Use relative path for Docker environment
+    baseURL: '/api', 
   },
   production: {
-    baseURL: '/api', // Use relative path for production
+    baseURL: '', 
   }
 }
 
