@@ -2,6 +2,8 @@
 
 The WIRA Dashboard is a web application designed to manage and display comprehensive score data for players of the game WIRA. This application combines an efficient backend capable of handling over 100,000 lines of data with an interactive, user-friendly frontend that delivers a seamless experience for end users.
 
+![WIRA Dashboard](wira-dashboard.png)
+
 ## Features
 
 ### Core Features
@@ -97,31 +99,3 @@ Start the development server:
 ```bash
 npm run serve
 ```
-
-
-### 5. Project Structure
-├── frontend/               # Vue.js frontend application
-│   ├── src/                # Source files
-│   │   ├── assets/         # Static assets
-│   │   ├── components/     # Vue components
-│   │   ├── views/          # Page components
-│   │   └── api/            # API utilities
-│   └── package.json        # Frontend dependencies
-│
-├── backend/               # Golang backend server
-│   ├── auth/              # Authentication package
-│   ├── cache/             # Redis caching package
-│   ├── config/            # Configuration package
-│   ├── db/                # Database migrations
-│   ├── ranking/           # Ranking logic package
-│   └── main.go            # Entry point
-
-
-## API Endpoints
-The backend provides RESTful APIs with the following main endpoints:
-
-POST /api/auth/register - Register a new user
-POST /api/auth/login - Login user
-GET /api/profile - Get user profile
-GET /api/rankings - Get rankings with pagination
-GET /api/classes - Get available classes
