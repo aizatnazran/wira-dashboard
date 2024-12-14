@@ -11,8 +11,8 @@
           
           <!-- Profile Info -->
           <div class="flex-grow text-center sm:text-left">
-            <h1 class="text-3xl sm:text-4xl font-cinzel text-ac-gold mb-2 break-words">{{ profile.username }}</h1>
-            <p class="text-ac-light mb-4 break-words">{{ profile.email }}</p>
+            <h1 class="text-3xl sm:text-4xl font-cinzel text-ac-gold mb-2 break-words">{{ user?.username }}</h1>
+            <p class="text-ac-light mb-4 break-words">{{ user?.email }}</p>
           </div>
         </div>
       </div>
@@ -28,15 +28,15 @@
                 <dl class="space-y-3">
                   <div>
                     <dt class="text-sm font-medium text-ac-light">Username</dt>
-                    <dd class="mt-1 text-sm text-ac-gold break-words">{{ profile.username }}</dd>
+                    <dd class="mt-1 text-sm text-ac-gold break-words">{{ user?.username }}</dd>
                   </div>
                   <div>
                     <dt class="text-sm font-medium text-ac-light">Email</dt>
-                    <dd class="mt-1 text-sm text-ac-gold break-words">{{ profile.email }}</dd>
+                    <dd class="mt-1 text-sm text-ac-gold break-words">{{ user?.email }}</dd>
                   </div>
                   <div>
                     <dt class="text-sm font-medium text-ac-light">Member Since</dt>
-                    <dd class="mt-1 text-sm text-ac-gold">{{ formatMemberSince(profile.created_at) }}</dd>
+                    <dd class="mt-1 text-sm text-ac-gold">{{ user?.created_at ? formatMemberSince(user.created_at) : '' }}</dd>
                   </div>
                 </dl>
               </div>
@@ -46,12 +46,12 @@
             <div>
               <div class="flex items-center justify-between mb-2">
                 <h4 class="text-sm font-medium text-ac-gold">Two-Factor Authentication</h4>
-                <span :class="profile.two_factor_enabled ? 'bg-green-600' : 'bg-red-600'" class="px-2 py-1 rounded text-xs text-white">
-                  {{ profile.two_factor_enabled ? 'Enabled' : 'Disabled' }}
+                <span :class="user?.two_factor_enabled ? 'bg-green-600' : 'bg-red-600'" class="px-2 py-1 rounded text-xs text-white">
+                  {{ user?.two_factor_enabled ? 'Enabled' : 'Disabled' }}
                 </span>
               </div>
               <div class="mt-2 border border-ac-gold/30 rounded-lg p-4 bg-ac-dark">
-                <div v-if="!profile.two_factor_enabled" class="space-y-3">
+                <div v-if="!user?.two_factor_enabled" class="space-y-3">
                   <p class="text-sm text-ac-light">Enhance your account security by enabling two-factor authentication.</p>
                   <button 
                     @click="showEnableDialog = true"
@@ -214,22 +214,28 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useStore } from 'vuex'
-import axios from 'axios'
-import Swal from 'sweetalert2'
+import { useToast } from 'vue-toastification'
+import api from '@/api/config'
 import QRCodeVue from 'qrcode.vue'
 import profileImage from '@/assets/profile.png'
 
 const store = useStore()
-const profile = ref({})
-const showEnableDialog = ref(false)
-const qrUrl = ref('')
-const secret = ref('')
-const password = ref('')
-const verificationCode = ref('')
-const error = ref('')
-const step = ref(1)
+const toast = useToast()
+const loading = ref(false)
+const user = ref(null)
 
-
+const fetchUserProfile = async () => {
+  try {
+    loading.value = true
+    const response = await api.get('/api/profile')
+    user.value = response.data
+  } catch (error) {
+    console.error('Error fetching profile:', error)
+    toast.error('Failed to load profile data')
+  } finally {
+    loading.value = false
+  }
+}
 
 const highestRanked = computed(() => {
   return {
@@ -255,39 +261,13 @@ const formatMemberSince = (dateStr) => {
   })
 }
 
-const fetchProfile = async () => {
-  try {
-    const token = store.getters.token
-    if (!token) {
-      throw new Error('No authentication token found')
-    }
-
-    const response = await axios.get('http://localhost:8080/api/profile', {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    })
-    
-    if (response.data) {
-      profile.value = response.data
-    }
-  } catch (err) {
-    console.error('Failed to fetch profile:', err)
-    if (err.response?.status === 401) {
-      // Session expired or invalid token
-      await store.dispatch('handleSessionExpired')
-    } else {
-      Swal.fire({
-        title: 'Error',
-        text: 'Failed to load profile data. Please try again later.',
-        icon: 'error',
-        background: '#2A2A2A',
-        color: '#F5F5F5',
-        confirmButtonColor: '#C6A875'
-      })
-    }
-  }
-}
+const showEnableDialog = ref(false)
+const qrUrl = ref('')
+const secret = ref('')
+const password = ref('')
+const verificationCode = ref('')
+const error = ref('')
+const step = ref(1)
 
 const closeEnableDialog = () => {
   showEnableDialog.value = false
@@ -302,7 +282,7 @@ const closeEnableDialog = () => {
 const verifyPassword = async () => {
   try {
     error.value = ''
-    const response = await axios.post('http://localhost:8080/api/2fa/enable', 
+    const response = await api.post('/api/2fa/enable', 
       { password: password.value },
       {
         headers: {
@@ -321,7 +301,7 @@ const verifyPassword = async () => {
 const verify2FA = async () => {
   try {
     error.value = ''
-    await axios.post('http://localhost:8080/api/2fa/verify', 
+    await api.post('/api/2fa/verify', 
       { 
         code: verificationCode.value,
         secret: secret.value
@@ -332,7 +312,7 @@ const verify2FA = async () => {
         }
       }
     )
-    await fetchProfile()
+    await fetchUserProfile()
     closeEnableDialog()
   } catch (err) {
     error.value = err.response?.data?.error || 'Failed to verify code'
@@ -341,18 +321,18 @@ const verify2FA = async () => {
 
 const handleDisable2FA = async () => {
   try {
-    await axios.post('http://localhost:8080/api/2fa/disable', {}, {
+    await api.post('/api/2fa/disable', {}, {
       headers: {
         Authorization: `Bearer ${store.getters.token}`
       }
     })
-    await fetchProfile() // Fetch updated profile after disabling 2FA
+    await fetchUserProfile() // Fetch updated profile after disabling 2FA
   } catch (err) {
     console.error('Failed to disable 2FA:', err)
   }
 }
 
 onMounted(() => {
-  fetchProfile()
+  fetchUserProfile()
 })
 </script>

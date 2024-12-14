@@ -1,7 +1,7 @@
 import { createStore } from 'vuex'
-import axios from 'axios'
 import router from '@/router'
 import { useToast } from 'vue-toastification'
+import api from '@/api/config'
 
 export default createStore({
   state: {
@@ -28,10 +28,8 @@ export default createStore({
       state.token = token
       if (token) {
         localStorage.setItem('token', token)
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
       } else {
         localStorage.removeItem('token')
-        delete axios.defaults.headers.common['Authorization']
       }
     },
     setSessionID(state, sessionID) {
@@ -49,7 +47,6 @@ export default createStore({
       localStorage.removeItem('user')
       localStorage.removeItem('token')
       localStorage.removeItem('sessionID')
-      delete axios.defaults.headers.common['Authorization']
       if (state.sessionCheckInterval) {
         clearInterval(state.sessionCheckInterval)
         state.sessionCheckInterval = null
@@ -59,7 +56,7 @@ export default createStore({
   actions: {
     async login({ commit, dispatch }, credentials) {
       try {
-        const response = await axios.post('/api/auth/login', credentials)
+        const response = await api.post('/api/auth/login', credentials)
         const { token, user, sessionID } = response.data
         
         commit('setUser', user)
@@ -80,12 +77,15 @@ export default createStore({
     async logout({ commit, state }) {
       try {
         if (state.sessionID) {
-          // Set session ID in header
-          const headers = { 'X-Session-ID': state.sessionID }
-          await axios.post('/api/auth/logout', null, { headers })
+          try {
+            // Set session ID in header
+            const headers = { 'X-Session-ID': state.sessionID }
+            await api.post('/api/auth/logout', null, { headers })
+          } catch (error) {
+            // Ignore logout errors since we're clearing the session anyway
+            console.debug('Logout request failed:', error)
+          }
         }
-      } catch (error) {
-        console.error('Logout error:', error)
       } finally {
         commit('clearSession')
         router.push('/login')
@@ -96,11 +96,16 @@ export default createStore({
       try {
         if (!state.sessionID) return
         
-        await axios.post('/api/auth/validate-session', {
+        await api.post('/api/auth/validate-session', {
           sessionID: state.sessionID
         })
       } catch (error) {
-        console.error('Session validation failed:', error)
+        // Only log non-401 errors as actual errors
+        if (error.response?.status !== 401) {
+          console.error('Unexpected session validation error:', error)
+        } else {
+          console.debug('Session expired naturally')
+        }
         dispatch('handleSessionExpired')
       }
     },
@@ -110,23 +115,27 @@ export default createStore({
         clearInterval(state.sessionCheckInterval)
       }
       
-      // Check session every minute
+      // Check session every 60 seconds
       state.sessionCheckInterval = setInterval(() => {
         dispatch('checkSession')
-      }, 60000) // 1 minute
+      }, 60000)
     },
     
     async handleSessionExpired({ dispatch }) {
-      await dispatch('logout')
-      useToast().error('Session expired. Please log in again.', {
-        timeout: false, // Toast will not auto-close
-        closeOnClick: false // Cannot be closed by clicking
-      })
+      try {
+        await dispatch('logout')
+        useToast().warning('Your session has expired. Please log in again.', {
+          timeout: 5000,
+          closeOnClick: true
+        })
+      } catch (error) {
+        console.error('Error handling session expiration:', error)
+      }
     },
     
     async verify2FALogin({ commit, dispatch }, { username, code }) {
       try {
-        const response = await axios.post('/api/auth/2fa/login/verify', { username, code })
+        const response = await api.post('/api/auth/2fa/login/verify', { username, code })
         const { token, user, sessionID } = response.data
         
         commit('setUser', user)

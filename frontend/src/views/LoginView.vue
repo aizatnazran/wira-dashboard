@@ -78,8 +78,8 @@
 import { ref } from 'vue'
 import { useStore } from 'vuex'
 import Swal from 'sweetalert2'
-import axios from 'axios'
 import { useToast } from 'vue-toastification'
+import api from '@/api/config'
 
 export default {
   setup() {
@@ -129,7 +129,7 @@ export default {
         }
 
         if (!show2FAInput.value) {
-          const initialLoginResponse = await axios.post('http://localhost:8080/api/auth/login', {
+          const initialLoginResponse = await api.post('/api/auth/login', {
             username: username.value,
             password: password.value
           })

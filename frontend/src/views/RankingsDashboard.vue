@@ -44,42 +44,60 @@
       </div>
 
       <!-- Rankings Table -->
-      <div class="bg-ac-gray rounded-lg overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="min-w-full table-auto">
-            <thead class="bg-ac-dark">
-              <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-ac-gold uppercase tracking-wider">Rank</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-ac-gold uppercase tracking-wider">Player</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-ac-gold uppercase tracking-wider">Class</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-ac-gold uppercase tracking-wider">Score</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-ac-dark">
-              <template v-if="loading">
-                <tr v-for="i in itemsPerPage" :key="i">
-                  <td colspan="4" class="px-6 py-4">
-                    <div class="animate-pulse flex space-x-4">
-                      <div class="h-4 bg-ac-dark rounded w-3/4"></div>
-                    </div>
-                  </td>
-                </tr>
-              </template>
-              <template v-else>
-                <tr v-for="rank in rankings" :key="rank.char_id" class="hover:bg-ac-dark/50">
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-ac-light">{{ rank.rank }}</td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-ac-light">{{ rank.username }}</td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-ac-light">{{ rank.class_name }}</td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-ac-light">{{ rank.reward_score }}</td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
+      <div class="mt-8 flex flex-col">
+        <div class="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
+          <div class="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
+            <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+              <table class="min-w-full divide-y divide-ac-gold/30">
+                <thead class="bg-ac-gray">
+                  <tr>
+                    <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-ac-gold sm:pl-6">RANK</th>
+                    <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-ac-gold">PLAYER</th>
+                    <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-ac-gold">CLASS</th>
+                    <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-ac-gold">SCORE</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-ac-gold/30 bg-ac-dark">
+                  <template v-if="loading">
+                    <tr v-for="i in itemsPerPage" :key="i">
+                      <td colspan="4" class="px-6 py-4">
+                        <div class="animate-pulse flex space-x-4">
+                          <div class="h-4 bg-ac-gold/20 rounded w-3/4"></div>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                  <template v-else-if="rankings && rankings.length > 0">
+                    <tr v-for="(ranking, index) in rankings" :key="ranking.char_id">
+                      <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm text-ac-gold sm:pl-6">{{ (currentPage - 1) * itemsPerPage + index + 1 }}</td>
+                      <td class="whitespace-nowrap px-3 py-4 text-sm text-ac-light">{{ ranking.username }}</td>
+                      <td class="whitespace-nowrap px-3 py-4 text-sm text-ac-light">{{ ranking.class_name }}</td>
+                      <td class="whitespace-nowrap px-3 py-4 text-sm text-ac-light">{{ ranking.reward_score }}</td>
+                    </tr>
+                  </template>
+                  <tr v-else>
+                    <td colspan="4" class="px-3 py-8 text-center text-ac-light">
+                      <div class="flex flex-col items-center justify-center space-y-2">
+                        <i class="fas fa-search text-ac-gold text-2xl mb-2"></i>
+                        <p class="text-lg font-medium text-ac-gold">No results found</p>
+                        <p class="text-sm text-ac-light" v-if="searchQuery">
+                          No matches found for "{{ searchQuery }}". Try adjusting your search.
+                        </p>
+                        <p class="text-sm text-ac-light" v-else>
+                          No rankings available at the moment.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Pagination -->
-      <div class="mt-6 flex justify-between items-center">
+      <div v-if="rankings && rankings.length > 0" class="flex items-center justify-between border-t border-ac-gold/30 bg-ac-dark px-4 py-3 sm:px-6">
         <div class="text-sm text-ac-light">
           Showing {{ (currentPage - 1) * itemsPerPage + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalItems) }} of {{ totalItems }} results
         </div>
@@ -107,35 +125,38 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import debounce from 'lodash/debounce'
-import { fetchWithAuth } from '../api'
+import api from '@/api/config'
 
-// Pagination state
+const searchQuery = ref('')
+const selectedClass = ref('all')
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 const totalItems = ref(0)
-const searchQuery = ref('')
-const selectedClass = ref('all')
-
-// Rankings data
-const rankings = ref([])
+const rankings = ref([]) // Initialize as empty array
 const loading = ref(false)
 
-// Classes grouped by race
 const classGroups = {
   Human: ['PAHLAWAN', 'PENDEKAR', 'PEMANAH', 'PENGAMAL'],
   Numah: ['KSHATRIYA', 'VYAPARI', 'RAKSHAK', 'VAIDYA']
 }
 
-// Fetch rankings with pagination and filtering
 const fetchRankings = async () => {
-  loading.value = true
   try {
-    const classParam = selectedClass.value === 'all' ? '' : `&class=${selectedClass.value}`
-    const data = await fetchWithAuth(`/api/rankings?page=${currentPage.value}&limit=${itemsPerPage.value}&search=${searchQuery.value}${classParam}`)
-    rankings.value = data.rankings
-    totalItems.value = data.total
+    loading.value = true
+    const params = {
+      page: currentPage.value,
+      limit: itemsPerPage.value,
+      search: searchQuery.value,
+      class: selectedClass.value === 'all' ? undefined : selectedClass.value
+    }
+
+    const response = await api.get('/api/rankings', { params })
+    rankings.value = response.data.rankings || []
+    totalItems.value = response.data.total || 0
   } catch (error) {
     console.error('Error fetching rankings:', error)
+    rankings.value = []
+    totalItems.value = 0
   } finally {
     loading.value = false
   }

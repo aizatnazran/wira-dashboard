@@ -80,6 +80,7 @@ import { computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { useToast } from 'vue-toastification'
 import Swal from 'sweetalert2'
+import api from '@/api/config'
 
 const store = useStore()
 const toast = useToast()
@@ -128,14 +129,9 @@ const handleResetCache = async () => {
 
   if (result.isConfirmed) {
     try {
-      const response = await fetch('http://localhost:8080/api/cache/clear', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${store.state.token}`
-        }
-      })
+      const response = await api.post('/api/cache/clear')
 
-      if (response.ok) {
+      if (response.status === 200) {
         toast.success('Cache cleared successfully', {
           position: 'top-right',
           timeout: 5000,

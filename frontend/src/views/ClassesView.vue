@@ -66,9 +66,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useToast } from 'vue-toastification'
+import api from '@/api/config'
 import CombatTypeIcon from '@/components/CombatTypeIcon.vue'
-import { fetchWithAuth } from '../api'
 
+const toast = useToast()
 const classes = ref([])
 const loading = ref(true)
 const error = ref(null)
@@ -80,9 +82,13 @@ const raceMap = {
 
 const fetchClasses = async () => {
   try {
-    classes.value = await fetchWithAuth('/api/classes')
+    loading.value = true
+    const response = await api.get('/api/classes')
+    classes.value = response.data
   } catch (err) {
-    error.value = err.message
+    console.error('Error fetching classes:', err)
+    error.value = 'Failed to load classes'
+    toast.error('Failed to load classes')
   } finally {
     loading.value = false
   }

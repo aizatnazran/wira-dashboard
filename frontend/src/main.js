@@ -2,15 +2,10 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import store from './store'
-import axios from 'axios'
 import Toast from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 import './assets/tailwind.css'
 import '@fortawesome/fontawesome-free/css/all.css';
-
-// Configure axios defaults
-axios.defaults.baseURL = 'http://localhost:8080'
-axios.defaults.withCredentials = true
 
 const app = createApp(App)
 
