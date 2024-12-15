@@ -351,6 +351,8 @@ const load3DModel = () => {
   controls.rotateSpeed = 0.8; 
   controls.enableZoom = false; 
   controls.target.set(0, 0.5, 0); 
+  controls.minPolarAngle = Math.PI / 2;
+  controls.maxPolarAngle = Math.PI / 2; 
   controls.update();
 
   // Load GLB Model
