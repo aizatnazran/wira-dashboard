@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-ENV VUE_APP_ENV=docker
+ENV NODE_ENV=production
 RUN npm run build
 
 # Production stage

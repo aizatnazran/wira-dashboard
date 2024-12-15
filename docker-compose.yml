@@ -8,7 +8,6 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - VUE_APP_ENV=docker
     ports:
       - "3000:80"
     depends_on:
