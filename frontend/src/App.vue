@@ -12,13 +12,6 @@
           </div>
           <div class="flex items-center space-x-1 sm:space-x-4">
             <template v-if="isAuthenticated">
-              <button 
-                @click="handleResetCache" 
-                class="text-ac-gold hover:text-ac-light px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-transform duration-300 hover:rotate-180"
-                title="Reset Cache"
-              >
-                <i class="fas fa-redo text-ac-gold"></i>
-              </button>
               <router-link 
                 to="/" 
                 class="text-ac-gold hover:text-ac-light px-2 sm:px-3 py-2 rounded-md text-sm font-medium"
@@ -80,7 +73,6 @@ import { computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { useToast } from 'vue-toastification'
 import Swal from 'sweetalert2'
-import api from '@/api/config'
 
 const store = useStore()
 const toast = useToast()
@@ -110,42 +102,6 @@ const handleLogout = async () => {
       pauseOnHover: true,
       draggable: true,
     })
-  }
-}
-
-const handleResetCache = async () => {
-  const result = await Swal.fire({
-    title: 'Clear Cache',
-    text: 'Are you sure you want to clear the cache?',
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonText: 'Yes, clear it',
-    cancelButtonText: 'Cancel',
-    background: '#2A2A2A',
-    color: '#F5F5F5',
-    confirmButtonColor: '#C6A875',
-    cancelButtonColor: '#4B5563'
-  })
-
-  if (result.isConfirmed) {
-    try {
-      const response = await api.post('/api/cache/clear')
-
-      if (response.status === 200) {
-        toast.success('Cache cleared successfully', {
-          position: 'top-right',
-          timeout: 5000,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        })
-      } else {
-        toast.error('Failed to clear cache')
-      }
-    } catch (error) {
-      console.error('Error clearing cache:', error)
-      toast.error('Failed to clear cache')
-    }
   }
 }
 
