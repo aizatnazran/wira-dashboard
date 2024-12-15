@@ -68,12 +68,44 @@
                     </tr>
                   </template>
                   <template v-else-if="rankings && rankings.length > 0">
-                    <tr v-for="(ranking, index) in rankings" :key="ranking.char_id">
-                      <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm text-ac-gold sm:pl-6">{{ (currentPage - 1) * itemsPerPage + index + 1 }}</td>
-                      <td class="whitespace-nowrap px-3 py-4 text-sm text-ac-light">{{ ranking.username }}</td>
-                      <td class="whitespace-nowrap px-3 py-4 text-sm text-ac-light">{{ ranking.class_name }}</td>
-                      <td class="whitespace-nowrap px-3 py-4 text-sm text-ac-light">{{ ranking.reward_score }}</td>
-                    </tr>
+                    <tr
+  v-for="(ranking, index) in rankings"
+  :key="ranking.char_id"
+  :class="{'bg-ac-gold/10': (currentPage - 1) * itemsPerPage + index + 1 <= 3}"
+>
+  <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm text-ac-gold sm:pl-6">
+    <img 
+  v-if="(currentPage - 1) * itemsPerPage + index + 1 === 1" 
+  src="@/assets/medals/gold-medal.png" 
+  alt="Gold Medal" 
+  class="w-8 h-8 inline-block"
+/>
+<img 
+  v-else-if="(currentPage - 1) * itemsPerPage + index + 1 === 2" 
+  src="@/assets/medals/silver-medal.png" 
+  alt="Silver Medal" 
+  class="w-8 h-8 inline-block"
+/>
+<img 
+  v-else-if="(currentPage - 1) * itemsPerPage + index + 1 === 3" 
+  src="@/assets/medals/bronze-medal.png" 
+  alt="Bronze Medal" 
+  class="w-8 h-8 inline-block"
+/>
+<span v-else>
+  {{ (currentPage - 1) * itemsPerPage + index + 1 }}
+</span>
+  </td>
+  <td class="whitespace-nowrap px-3 py-4 text-sm text-ac-light">
+    {{ ranking.username }}
+  </td>
+  <td class="whitespace-nowrap px-3 py-4 text-sm text-ac-light">
+    {{ ranking.class_name }}
+  </td>
+  <td class="whitespace-nowrap px-3 py-4 text-sm text-ac-light">
+    {{ ranking.reward_score }}
+  </td>
+</tr>
                   </template>
                   <tr v-else>
                     <td colspan="4" class="px-3 py-8 text-center text-ac-light">
@@ -132,7 +164,7 @@ const selectedClass = ref('all')
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 const totalItems = ref(0)
-const rankings = ref([]) // Initialize as empty array
+const rankings = ref([]) 
 const loading = ref(false)
 
 const classGroups = {

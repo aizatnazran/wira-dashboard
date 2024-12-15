@@ -75,20 +75,57 @@
 
             <!-- Character Stats -->
             <div>
-              <h4 class="text-sm font-medium text-ac-gold">Character Statistics</h4>
-              <div class="mt-2 border border-ac-gold/30 rounded-lg p-4 bg-ac-dark">
-                <dl class="space-y-3">
-                  <div>
-                    <dt class="text-sm font-medium text-ac-light">Total Characters</dt>
-                    <dd class="mt-1 text-sm text-ac-gold">3</dd>
-                  </div>
-                  <div>
-                    <dt class="text-sm font-medium text-ac-light">Highest Ranked Class</dt>
-                    <dd class="mt-1 text-sm text-ac-gold">{{ highestRanked.class }} - Rank #{{ highestRanked.rank }}</dd>
-                  </div>
-                </dl>
-              </div>
-            </div>
+  <h4 class="text-sm font-medium text-ac-gold">Character Statistics</h4>
+  <div class="mt-2 border border-ac-gold/30 rounded-lg p-4 bg-ac-dark flex flex-row gap-6">
+    <!-- Left: Character Stats -->
+    <div class="flex-1">
+      <dl class="space-y-3">
+        <div>
+          <dt class="text-sm font-medium text-ac-light">Total Characters</dt>
+          <dd class="mt-1 text-sm text-ac-gold">{{ characters.length }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-ac-light">Highest Ranked Class</dt>
+          <dd class="mt-1 text-sm text-ac-gold">{{ highestRanked.class }} - Rank #{{ highestRanked.rank }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-ac-light">Average Score</dt>
+          <dd class="mt-1 text-sm text-ac-gold">{{ averageScore }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-ac-light">Total Victories</dt>
+          <dd class="mt-1 text-sm text-ac-gold">{{ playerStats.victories }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-ac-light">Win Rate</dt>
+          <dd class="mt-1 text-sm text-ac-gold">{{ playerStats.winRate }}%</dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-ac-light">Battle Rating</dt>
+          <dd class="mt-1 text-sm text-ac-gold">{{ playerStats.battleRating }}/100</dd>
+        </div>
+      </dl>
+
+      <!-- Pentagon Chart -->
+      <div class="mt-6">
+        <h5 class="text-sm font-medium text-ac-gold mb-4">Combat Attributes</h5>
+        <div class="relative w-full h-48">
+          <canvas ref="statsChart" class="w-full h-full"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: 3D Model -->
+    <div class="flex-1 flex items-center justify-center">
+    <div 
+    class="w-full h-[500px] sm:h-[400px] md:h-[500px] relative bg-transparent rounded-lg overflow-hidden"
+    style="max-height: 80vh;"
+  >
+    <div ref="modelContainer" class="w-full h-full"></div>
+  </div>
+</div>
+  </div>
+</div>
           </div>
 
           <!-- Characters List -->
@@ -212,17 +249,27 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { useStore } from 'vuex'
 import { useToast } from 'vue-toastification'
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import api from '@/api/config'
 import QRCodeVue from 'qrcode.vue'
 import profileImage from '@/assets/profile.png'
+import Chart from 'chart.js/auto'
+
+let camera; // Declare camera globally
+let renderer; // Declare renderer globally
+let mixer; // Declare mixer globally
 
 const store = useStore()
 const toast = useToast()
 const loading = ref(false)
 const user = ref(null)
+const statsChart = ref(null)
+let chart = null
 
 const fetchUserProfile = async () => {
   try {
@@ -252,6 +299,26 @@ const characters = computed(() => {
   ]
 })
 
+const averageScore = computed(() => {
+  const totalScore = characters.value.reduce((acc, char) => acc + char.score, 0)
+  return (totalScore / characters.value.length).toFixed(2)
+})
+
+const playerStats = computed(() => {
+  return {
+    victories: 100,
+    winRate: 75,
+    battleRating: 85,
+    combatStats: {
+      attack: 85,
+      defense: 85,
+      speed: 90,
+      technique: 85,
+      strategy: 80
+    }
+  }
+})
+
 const formatMemberSince = (dateStr) => {
   if (!dateStr) return 'N/A'
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -260,6 +327,91 @@ const formatMemberSince = (dateStr) => {
     day: 'numeric'
   })
 }
+
+const modelContainer = ref(null)
+const load3DModel = () => {
+  // Scene, Camera, and Renderer
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(
+    35,
+    modelContainer.value.offsetWidth / modelContainer.value.offsetHeight,
+    0.1,
+    1000
+  );
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(modelContainer.value.offsetWidth, modelContainer.value.offsetHeight);
+  modelContainer.value.appendChild(renderer.domElement);
+
+  const light = new THREE.AmbientLight(0xffffff, 1.5);
+  scene.add(light);
+
+  const controls = new OrbitControls(camera, renderer.domElement); 
+  controls.enableDamping = true; 
+  controls.dampingFactor = 0.05;
+  controls.rotateSpeed = 0.8; 
+  controls.enableZoom = false; 
+  controls.target.set(0, 0.5, 0); 
+  controls.update();
+
+  // Load GLB Model
+  const loader = new GLTFLoader();
+  loader.load('/models/swordman2.glb', (gltf) => {
+    const model = gltf.scene;
+    model.position.set(0, -2, 0);
+    model.scale.set(2, 2, 2);
+    scene.add(model);
+
+    if (gltf.animations && gltf.animations.length > 0) {
+      mixer = new THREE.AnimationMixer(model);
+
+      const clip = gltf.animations[0];
+      const action = mixer.clipAction(clip);
+
+      action.setLoop(THREE.LoopRepeat, Infinity);
+      action.clampWhenFinished = false;
+      action.timeScale = 0.5;
+      action.play();
+
+      mixer.addEventListener('loop', () => {
+        action.time = 0;
+      });
+
+      const clock = new THREE.Clock();
+      const animate = () => {
+        requestAnimationFrame(animate);
+
+        const delta = clock.getDelta();
+        mixer.update(delta);
+
+        if (action.time > 3.3) {
+          action.time = 0;
+        }
+
+        renderer.render(scene, camera);
+      };
+      animate();
+    }
+  }, undefined, (error) => {
+    console.error('Error loading 3D model:', error);
+  });
+
+  camera.position.set(0, 1, -13);
+  camera.lookAt(0, 0.5, 0);
+
+  // Animation Loop
+  const clock = new THREE.Clock();
+  const animate = () => {
+    requestAnimationFrame(animate);
+
+    if (mixer) {
+      mixer.update(clock.getDelta());
+    }
+
+    controls.update(); 
+    renderer.render(scene, camera);
+  };
+  animate();
+};
 
 const showEnableDialog = ref(false)
 const qrUrl = ref('')
@@ -326,13 +478,91 @@ const handleDisable2FA = async () => {
         Authorization: `Bearer ${store.getters.token}`
       }
     })
-    await fetchUserProfile() // Fetch updated profile after disabling 2FA
+    await fetchUserProfile() 
   } catch (err) {
     console.error('Failed to disable 2FA:', err)
   }
 }
 
+const initChart = () => {
+  if (statsChart.value) {
+    const ctx = statsChart.value.getContext('2d')
+    const stats = playerStats.value.combatStats
+    
+    if (chart) {
+      chart.destroy()
+    }
+
+    chart = new Chart(ctx, {
+      type: 'radar',
+      data: {
+        labels: ['Attack', 'Defense', 'Speed', 'Technique', 'Strategy'],
+        datasets: [{
+          label: 'Combat Stats',
+          data: [stats.attack, stats.defense, stats.speed, stats.technique, stats.strategy],
+          backgroundColor: 'rgba(255, 215, 0, 0.2)',
+          borderColor: 'rgba(255, 215, 0, 0.8)',
+          borderWidth: 2,
+          pointBackgroundColor: 'rgba(255, 215, 0, 1)',
+        }]
+      },
+      options: {
+        scales: {
+          r: {
+            angleLines: {
+              color: 'rgba(255, 215, 0, 0.1)'
+            },
+            grid: {
+              color: 'rgba(255, 215, 0, 0.1)'
+            },
+            pointLabels: {
+              color: '#D4AF37'
+            },
+            ticks: {
+              color: '#D4AF37',
+              backdropColor: 'transparent'
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            display: false
+          }
+        }
+      }
+    })
+  }
+}
+
+const handleResize = () => {
+  if (renderer && camera && modelContainer.value) {
+    const width = modelContainer.value.offsetWidth;
+    const height = modelContainer.value.offsetHeight;
+
+    renderer.setSize(width, height); 
+    camera.aspect = width / height; 
+    camera.updateProjectionMatrix();
+  }
+};
+
+window.addEventListener('resize', handleResize);
+
 onMounted(() => {
+  load3DModel()
   fetchUserProfile()
+  watch(statsChart, () => {
+    if (statsChart.value) {
+      initChart()
+    }
+  }, { immediate: true })
 })
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
+});
 </script>
+<style scoped>
+.bg-transparent {
+  background: transparent;
+}
+</style>
