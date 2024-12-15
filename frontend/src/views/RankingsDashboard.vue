@@ -11,7 +11,7 @@
       </div>
 
 <!-- Search and Filter Section -->
-<div class="mt-8 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+<div class="mt-8 mb-6 flex gap-2 items-center">
   <!-- Search Input -->
   <div class="flex-1 relative">
     <input
@@ -23,10 +23,10 @@
   </div>
 
   <!-- Class Filter -->
-  <div class="w-full md:w-64">
+  <div class="w-32 md:w-64">
     <select
       v-model="selectedClass"
-      class="w-full px-4 py-2 rounded-lg bg-ac-gray text-ac-light border border-ac-gold focus:outline-none focus:ring-2 focus:ring-ac-gold"
+      class="w-full px-2 py-2 rounded-lg bg-ac-gray text-ac-light border border-ac-gold focus:outline-none focus:ring-2 focus:ring-ac-gold text-sm"
     >
       <option value="all">All Classes</option>
       <optgroup label="Human">
@@ -44,14 +44,14 @@
 
   <!-- Reset Cache Button -->
   <button 
-  @click="handleResetCache" 
-  class="flex items-center justify-center w-10 h-10 rounded-lg bg-ac-gray border border-ac-gold text-white hover:text-ac-gold transition-colors duration-300"
-  title="Reset Cache"
->
-  <i 
-    class="fas fa-redo transform transition-transform duration-300 hover:rotate-180"
-  ></i>
-</button>
+    @click="handleResetCache" 
+    class="flex items-center justify-center w-10 h-10 rounded-lg bg-ac-gray border border-ac-gold text-white hover:text-ac-gold transition-colors duration-300"
+    title="Reset Cache"
+  >
+    <i 
+      class="fas fa-redo transform transition-transform duration-300 hover:rotate-180"
+    ></i>
+  </button>
 </div>
 
 
